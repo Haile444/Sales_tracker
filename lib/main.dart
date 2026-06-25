@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-
+import 'package:url_launcher/url_launcher.dart';
 void main() {
   runApp(const SalesTrackerApp());
 }
@@ -168,12 +168,45 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+     appBar: AppBar(
         backgroundColor: const Color(0xFF1D9E75),
         title: const Text(
           'Sales Tracker 🇪🇹',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: GestureDetector(
+              onTap: () async {
+                final url = Uri.parse(
+                  'https://my-latest-portfolio-alpha.vercel.app/',
+                );
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Developed by',
+                    style: TextStyle(color: Colors.white60, fontSize: 10),
+                  ),
+                  Text(
+                    'Hailemeskel Girum',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
