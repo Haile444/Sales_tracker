@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
+
 void main() {
   runApp(const SalesTrackerApp());
 }
@@ -87,14 +88,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  double _sumEntries(String type, DateTime from, DateTime to) {
-    return _entries
-        .where(
-          (e) => e.type == type && e.date.isAfter(from) && e.date.isBefore(to),
-        )
-        .fold(0, (a, e) => a + e.amount);
-  }
-
   bool _isToday(DateTime date) {
     final now = DateTime.now();
     return date.year == now.year &&
@@ -118,6 +111,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _saveEntries();
   }
 
+  void _deleteEntry(Entry entry) {
+    setState(() {
+      _entries.remove(entry);
+    });
+    _saveEntries();
+  }
+
   @override
   Widget build(BuildContext context) {
     final screens = [
@@ -126,10 +126,11 @@ class _HomeScreenState extends State<HomeScreen> {
         totalExpenses: totalExpensesToday,
         netProfit: netProfitToday,
         entries: _entries.where((e) => _isToday(e.date)).toList(),
+        onDelete: _deleteEntry,
       ),
       AddSaleScreen(onAdd: _addEntry),
       AddExpenseScreen(onAdd: _addEntry),
-      HistoryScreen(entries: _entries),
+      HistoryScreen(entries: _entries, onDelete: _deleteEntry),
     ];
 
     return Scaffold(
@@ -156,6 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
 class DashboardScreen extends StatelessWidget {
   final double totalSales, totalExpenses, netProfit;
   final List<Entry> entries;
+  final Function(Entry) onDelete;
 
   const DashboardScreen({
     super.key,
@@ -163,12 +165,13 @@ class DashboardScreen extends StatelessWidget {
     required this.totalExpenses,
     required this.netProfit,
     required this.entries,
+    required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-     appBar: AppBar(
+      appBar: AppBar(
         backgroundColor: const Color(0xFF1D9E75),
         title: const Text(
           'Sales Tracker 🇪🇹',
@@ -258,44 +261,6 @@ class DashboardScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEAF3DE),
-                      foregroundColor: const Color(0xFF1D9E75),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      elevation: 0,
-                    ),
-                    onPressed: () {},
-                    icon: const Icon(Icons.add),
-                    label: const Text(
-                      'Add Sale',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFCEBEB),
-                      foregroundColor: Colors.red,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      elevation: 0,
-                    ),
-                    onPressed: () {},
-                    icon: const Icon(Icons.remove),
-                    label: const Text(
-                      'Add Expense',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
             const Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -327,49 +292,80 @@ class DashboardScreen extends StatelessWidget {
                       itemCount: entries.length,
                       itemBuilder: (context, i) {
                         final e = entries[entries.length - 1 - i];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: e.type == 'sale'
-                                  ? const Color(0xFFEAF3DE)
-                                  : const Color(0xFFFCEBEB),
-                              child: Icon(
-                                e.type == 'sale'
-                                    ? Icons.arrow_upward
-                                    : Icons.arrow_downward,
-                                color: e.type == 'sale'
-                                    ? const Color(0xFF1D9E75)
-                                    : Colors.red,
-                                size: 18,
-                              ),
-                            ),
-                            title: Text(
-                              e.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            subtitle: Text(
-                              e.type == 'sale' ? 'Sale' : 'Expense',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            trailing: Text(
-                              '${e.type == 'sale' ? '+' : '-'}ETB ${e.amount.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                color: e.type == 'sale'
-                                    ? const Color(0xFF1D9E75)
-                                    : Colors.red,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        );
+                        return _EntryCard(entry: e, onDelete: onDelete);
                       },
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EntryCard extends StatelessWidget {
+  final Entry entry;
+  final Function(Entry) onDelete;
+
+  const _EntryCard({required this.entry, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dismissible(
+      key: Key('${entry.date.toIso8601String()}_${entry.name}_${entry.amount}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.delete, color: Colors.white, size: 28),
+      ),
+      onDismissed: (direction) {
+        onDelete(entry);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Entry deleted'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: entry.type == 'sale'
+                ? const Color(0xFFEAF3DE)
+                : const Color(0xFFFCEBEB),
+            child: Icon(
+              entry.type == 'sale' ? Icons.arrow_upward : Icons.arrow_downward,
+              color: entry.type == 'sale'
+                  ? const Color(0xFF1D9E75)
+                  : Colors.red,
+              size: 18,
+            ),
+          ),
+          title: Text(
+            entry.name,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          subtitle: Text(
+            entry.type == 'sale' ? 'Sale' : 'Expense',
+            style: const TextStyle(fontSize: 12),
+          ),
+          trailing: Text(
+            '${entry.type == 'sale' ? '+' : '-'}ETB ${entry.amount.toStringAsFixed(0)}',
+            style: TextStyle(
+              color: entry.type == 'sale'
+                  ? const Color(0xFF1D9E75)
+                  : Colors.red,
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+            ),
+          ),
         ),
       ),
     );
@@ -652,7 +648,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
 class HistoryScreen extends StatefulWidget {
   final List<Entry> entries;
-  const HistoryScreen({super.key, required this.entries});
+  final Function(Entry) onDelete;
+  const HistoryScreen({
+    super.key,
+    required this.entries,
+    required this.onDelete,
+  });
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -764,39 +765,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     itemCount: _filtered.length,
                     itemBuilder: (context, i) {
                       final e = _filtered[_filtered.length - 1 - i];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: e.type == 'sale'
-                                ? const Color(0xFFEAF3DE)
-                                : const Color(0xFFFCEBEB),
-                            child: Icon(
-                              e.type == 'sale'
-                                  ? Icons.arrow_upward
-                                  : Icons.arrow_downward,
-                              color: e.type == 'sale'
-                                  ? const Color(0xFF1D9E75)
-                                  : Colors.red,
-                              size: 18,
-                            ),
-                          ),
-                          title: Text(
-                            e.name,
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          subtitle: Text(e.date.toString().substring(0, 10)),
-                          trailing: Text(
-                            '${e.type == 'sale' ? '+' : '-'}ETB ${e.amount.toStringAsFixed(0)}',
-                            style: TextStyle(
-                              color: e.type == 'sale'
-                                  ? const Color(0xFF1D9E75)
-                                  : Colors.red,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      );
+                      return _EntryCard(entry: e, onDelete: widget.onDelete);
                     },
                   ),
           ),
